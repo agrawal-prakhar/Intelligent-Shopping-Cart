@@ -13,9 +13,10 @@ e = espnow.ESPNow()
 e.active(True)
 
 # Define the peer's MAC address (replace with actual MAC)
-peer = b'\x14\x2b\x2f\xaf\x02\x58'  # MAC address of peer's wifi interface
+peer = b'\x14\x2b\x2f\xaf\x02\x58'
+peer2 = b'\x10\x06\x1c\x17\x3b\x44' # MAC address of peer's wifi interface
 e.add_peer(peer)  # Must add_peer() before send()
-
+e.add_peer(peer2)
 # Initialize the HC-SR04 ultrasonic sensor
 sensor_middle = HCSR04(trigger_pin=32, echo_pin=14, echo_timeout_us=10000)
 sensor_left = HCSR04(trigger_pin=13, echo_pin=12, echo_timeout_us=10000)
@@ -23,6 +24,7 @@ sensor_right = HCSR04(trigger_pin=27, echo_pin=33, echo_timeout_us=10000)
 
 # Send a startup message to the peer
 e.send(peer, "Starting...")
+e.send(peer2, "Starting...")
 
 # Main loop to continuously read distance and send data via ESP-NOW
 # Main loop to continuously read distance and send data via ESP-NOW
@@ -39,6 +41,7 @@ while True:
     
     payload = f"{d_mid:.1f},{d_left:.1f},{d_right:.1f},{extra_value}"
     e.send(peer, payload)
+    e.send(peer2, payload)
     print("TX:", payload)
 
-    sleep(1)
+    sleep(0.001)
