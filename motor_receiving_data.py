@@ -48,7 +48,7 @@ print("Receiver ready … waiting for packets")
      # need ≥ 40 cm ahead to keep moving      # (cm) if |left-right| < GAP → treated as “straight”
 
 while True:
-    host, msg = e.irecv(100)
+    host, msg = e.irecv(1)
 
 
     if not msg:
@@ -72,8 +72,8 @@ while True:
             d_right = 250
             
         # ── debug print ──
-        print("mid %.1f cm  left %.1f cm  right %.1f cm  extra %.0f"
-              % (d_mid, d_left, d_right, extra))
+        print("mid %.1f cm  left %.1f cm  right %.1f cm"
+              % (d_mid, d_left, d_right))
         
         left_angle, left_rad = angle_from_sides(d_left, 17.8, d_right)
         right_angle, right_rad = angle_from_sides(d_right, 17.8, d_left)
@@ -96,13 +96,13 @@ while True:
                 all_stop()
         elif left_angle > right_angle:
             # more space on the left → veer left (slow/stop left motor)
-            m2_fwd()                  # left track slow
-            m1_stop()
+            m1_fwd()                  # left track slow
+            m2_stop()
             continue# right track fast
         else:
             # more space on the right → veer right
-            m1_fwd()
-            m2_stop()
+            m2_fwd()
+            m1_stop()
             continue
 
     except (ValueError, IndexError) as err:
