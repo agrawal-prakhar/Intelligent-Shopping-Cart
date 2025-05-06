@@ -1,16 +1,22 @@
-import network, espnow, machine, utime
+import network, espnow
 from machine import Pin, PWM, Timer
-import math
-from time import sleep
 
+# ──────────── ESP‑NOW set‑up ────────────
 sta = network.WLAN(network.STA_IF)
 sta.active(True)
-sta.disconnect()                       # keep Wi-Fi idle
+sta.disconnect()
 e = espnow.ESPNow()
 e.active(True)
-
 print("Receiver ready … waiting for packets")
 
+# ──────────── Buzzer set‑up ─────────────
+BUZZ_PIN   = 27                      # same pin you used for L1
+buzzer     = PWM(Pin(BUZZ_PIN), freq=440, duty=0)   # start silent
+MELODY_DUTY = 512                    # 50 % duty (0‑1023 on ESP32)
+HONK_DUTY   = 768                    # louder honk (≈ 75 %)
+HONK_FREQ   = 880                    # A5 – pick any “annoying” freq you like
+
+# ──────────── Note table (unchanged) ───
 C3 = 131
 CS3 = 139
 D3 = 147
@@ -77,70 +83,64 @@ D8 = 4699
 DS8 = 4978
 
 music = [
-C4, E4, G4, C5, E5, G4, C5, E5, C4, E4, G4, C5, E5, G4, C5, E5,
-C4, D4, G4, D5, F5, G4, D5, F5, C4, D4, G4, D5, F5, G4, D5, F5,
-B3, D4, G4, D5, F5, G4, D5, F5, B3, D4, G4, D5, F5, G4, D5, F5,
-C4, E4, G4, C5, E5, G4, C5, E5, C4, E4, G4, C5, E5, G4, C5, E5,
-C4, E4, A4, E5, A5, A4, E5, A4, C4, E4, A4, E5, A5, A4, E5, A4,
-C4, D4, FS4, A4, D5, FS4, A4, D5, C4, D4, FS4, A4, D5, FS4, A4, D5,
-B3, D4, G4, D5, G5, G4, D5, G5, B3, D4, G4, D5, G5, G4, D5, G5,
-B3, C4, E4, G4, C5, E4, G4, C5, B3, C4, E4, G4, C5, E4, G4, C5,
-B3, C4, E4, G4, C5, E4, G4, C5, B3, C4, E4, G4, C5, E4, G4, C5,
-A3, C4, E4, G4, C5, E4, G4, C5, A3, C4, E4, G4, C5, E4, G4, C5,
-D3, A3, D4, FS4, C5, D4, FS4, C5, D3, A3, D4, FS4, C5, D4, FS4, C5,
-G3, B3, D4, G4, B4, D4, G4, B4, G3, B3, D4, G4, B4, D4, G4, B4
+    C4, E4, G4, C5, E5, G4, C5, E5, C4, E4, G4, C5, E5, G4, C5, E5,
+    C4, D4, G4, D5, F5, G4, D5, F5, C4, D4, G4, D5, F5, G4, D5, F5,
+    B3, D4, G4, D5, F5, G4, D5, F5, B3, D4, G4, D5, F5, G4, D5, F5,
+    C4, E4, G4, C5, E5, G4, C5, E5, C4, E4, G4, C5, E5, G4, C5, E5,
+    C4, E4, A4, E5, A5, A4, E5, A4, C4, E4, A4, E5, A5, A4, E5, A4,
+    C4, D4, FS4, A4, D5, FS4, A4, D5, C4, D4, FS4, A4, D5, FS4, A4, D5,
+    B3, D4, G4, D5, G5, G4, D5, G5, B3, D4, G4, D5, G5, G4, D5, G5,
+    B3, C4, E4, G4, C5, E4, G4, C5, B3, C4, E4, G4, C5, E4, G4, C5,
+    B3, C4, E4, G4, C5, E4, G4, C5, B3, C4, E4, G4, C5, E4, G4, C5,
+    A3, C4, E4, G4, C5, E4, G4, C5, A3, C4, E4, G4, C5, E4, G4, C5,
+    D3, A3, D4, FS4, C5, D4, FS4, C5, D3, A3, D4, FS4, C5, D4, FS4, C5,
+    G3, B3, D4, G4, B4, D4, G4, B4, G3, B3, D4, G4, B4, D4, G4, B4
 ]
 
+# ──────────── Melody timer & state ─────
+mel_timer   = Timer(1)
+note_idx    = 0
+playing_song = True   # start in “good” mode
 
+def melody_cb(t):
+    global note_idx
+    buzzer.freq(music[note_idx])
+    buzzer.duty(MELODY_DUTY)
+    note_idx = (note_idx + 1) % len(music)
 
-note_index = 0
-# This is the callback function
-def tcb(timer):
-    global duty_cycle
-    global note_index
-    if note_index < len(music)-1:
-        note_index += 1
-    else:
-        note_index = 0
-    
-    L1.freq(music[note_index])
-    
+# start the melody immediately
+mel_timer.init(period=500, mode=Timer.PERIODIC, callback=melody_cb)
 
-# ── Motion-control parameters (tweak to taste) ─────────────────────────────────
-     # need ≥ 40 cm ahead to keep moving      # (cm) if |left-right| < GAP → treated as “straight”
-
+# ──────────── Main loop ────────────────
 while True:
-    host, msg = e.irecv(1)
-
-
+    host, msg = e.irecv(1)           # 1‑ms timeout
     if not msg:
-        
-        continue                       # loop again
-
-    s = msg.decode()
-    if s == "end":
-        break
+        continue
 
     try:
-        d_mid, d_left, d_right, extra = map(float, s.split(","))
-        if d_mid == 0 or d_mid == -0:
-            d_mid = 250
-        
-        if d_left == 0 or d_left == -0:
-            d_left = 250
-            
-        if d_right == 0 or d_right == -0:
-            d_right = 250
-            
-        # ── debug print ──
-        print("mid %.1f cm  left %.1f cm  right %.1f cm"
-              % (d_mid, d_left, d_right))
-        
-        if d_mid <= 10:
-            t1 = Timer(1)
-            t1.init(period=500, mode=t1.PERIODIC, callback=tcb)
-        
-        
-        
-    except (ValueError, IndexError) as err:
-        print("Parse error:", err)
+        d_mid, d_left, d_right, _ = map(float, msg.decode().split(","))
+    except ValueError:
+        print("Parse error:", msg)
+        continue
+
+    # replace bogus zeros
+    if not d_mid:   d_mid = 250
+    if not d_left:  d_left = 250
+    if not d_right: d_right = 250
+
+    print("mid %.1f cm  left %.1f cm  right %.1f cm"
+          % (d_mid, d_left, d_right))
+
+    # ───── Condition handling ─────
+    if d_mid < 10 and playing_song:
+        # pause melody → start honk
+        mel_timer.deinit()
+        buzzer.freq(HONK_FREQ)
+        buzzer.duty(HONK_DUTY)
+        playing_song = False
+
+    elif d_mid >= 10 and not playing_song:
+        # obstacle cleared → resume melody
+        note_idx = 0
+        mel_timer.init(period=500, mode=Timer.PERIODIC, callback=melody_cb)
+        playing_song = True
